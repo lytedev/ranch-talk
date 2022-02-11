@@ -4,7 +4,7 @@
 
 **TODO**: Add a buttload of emojis and absolutely hilarious GIFs to this document. Engineers (especially those of the Divvy persuasion) really, really, _really_ love emojis and GIFs.
 
-<!-- livebook:{"break_markdown":true} -->
+**TODO**: How can we get interactive and collaborative displays showing ports and connections opening to fully leverage Livebook-ness?
 
 This talk is supposed to be 5-15 minutes long, so let's make sure we keep it that way with a timer and a super annoying alert!
 
@@ -23,8 +23,6 @@ alias RanchTalk.TalkTimer
 ## Ranch Introduction
 
 > Special thanks to Cody Poll for the excuse to waste a ton of time playing around with Livebook!
-
-<!-- livebook:{"break_markdown":true} -->
 
 From https://ninenines.eu/docs/en/ranch/2.1/guide/introduction/:
 
@@ -95,8 +93,6 @@ For starters, we're inside a Livebook, which is a Phoenix LiveView application. 
 
 Let's see if we can find ourselves. Erlang/OTP has a ton of awesome tools for looking at the primitives (processes, ports, and sockets), so lets look into some ways to see what we've already got happening, what's going on under the hood, and then let's build our own TCP acceptor pool to dive into.
 
-<!-- livebook:{"break_markdown":true} -->
-
 But before we just start looking for stuff blindly, let's investigate Ranch's documentation to see how it works so we know better what to look for. Don't worry, I'm not really going to make you read documentation yourself during a talk, so I've summarized the important stuff we'll look at below:
 
 * https://ninenines.eu/docs/en/ranch/2.1/guide/introduction/
@@ -119,8 +115,6 @@ But before we just start looking for stuff blindly, let's investigate Ranch's do
   * All socket operations go through "transport handlers"
     * These are simple callback modules (`@behaviour`s) for performing operations on sockets
   * Accepted connections are given to "the protocol handler" (just TCP for our use case)
-
-<!-- livebook:{"break_markdown":true} -->
 
 Sweet! Armed with this knowledge, we should be able to find evidence of these facts in our system _right now_. Let's do it!
 
