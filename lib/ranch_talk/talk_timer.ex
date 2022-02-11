@@ -44,17 +44,17 @@ defmodule RanchTalk.TalkTimer do
     tick(widget, state)
   end
 
-  def tick(widget, %{seconds_to_count: seconds_to_count, done_message: done_message} = state) do
+  def tick(widget, %{seconds_to_count: seconds_to_count} = state) do
+    new_state =
+      state
+      |> Map.put(:seconds_to_count, seconds_to_count - 1)
+      |> update_state_html()
+
+    set_html(widget, state.html)
+
     if seconds_to_count < 1 do
-      set_html(widget, done_message)
       Kino.JS.Live.cast(widget, :timer_finished)
     else
-      new_state =
-        state
-        |> Map.put(:seconds_to_count, seconds_to_count - 1)
-        |> update_state_html()
-
-      set_html(widget, state.html)
       Process.sleep(1000)
       tick(widget, new_state)
     end
@@ -88,16 +88,27 @@ defmodule RanchTalk.TalkTimer do
   end
 
   defp update_state_html(%{seconds_to_count: seconds} = state) do
-    minutes = seconds |> div(60) |> to_string()
-    seconds = seconds |> rem(60) |> to_string() |> String.pad_leading(2, "0")
+    minutes = seconds |> div(60) |> double_digit()
+    seconds = seconds |> rem(60) |> double_digit()
     Map.put(state, :html, Enum.join([minutes, ":", seconds]))
   end
+
+  defp double_digit(n), do: n |> to_string |> String.pad_leading(2, "0")
 
   asset "main.js" do
     """
     export function init(ctx, state) {
-      ctx.root.innerHTML = state.html;
-      ctx.handleEvent("set_html", html => ctx.root.innerHTML = html)
+      const display = document.createElement("div")
+      display.style.textAlign = 'center'
+      display.style.fontFamily = 'IosevkaLyte, monospace'
+      display.style.fontSize = '60px'
+      display.style.margin = '0 auto'
+      display.style.borderBottom = 'solid 8px rgba(0, 0, 0, 0.25)'
+      display.textContent = state.html
+      ctx.root.style.display = 'flex'
+      ctx.root.appendChild(display)
+
+      ctx.handleEvent("set_html", html => display.textContent = html)
       ctx.handleEvent("timer_finished", message => alert(message))
     }
     """

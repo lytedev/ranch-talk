@@ -15,7 +15,7 @@ code:
 ```bash
 mix escript.install github livebook-dev/livebook
 git clone https://git.lyte.dev/lytedev/ranch-talk.git
-mix deps.get
+mix do deps.get, compile
 env LIVEBOOK_PORT=5588 LIVEBOOK_IFRAME_PORT=5589 \
   livebook server --name ranch_is_neat@localhost --cookie yes-please \
   --default-runtime attached:ranch_is_neat@localhost:yes-please \

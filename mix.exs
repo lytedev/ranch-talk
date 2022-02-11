@@ -19,7 +19,8 @@ defmodule RanchTalk.MixProject do
 
   defp deps do
     [
-      {:kino, "~> 0.5.2"}
+      {:kino, "~> 0.5.2"},
+      {:ranch, "~> 2.1"}
     ]
   end
 end

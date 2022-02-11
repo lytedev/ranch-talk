@@ -2,6 +2,10 @@
 
 ## Talk Timer
 
+**TODO**: Add a buttload of emojis and absolutely hilarious GIFs to this document. Engineers (especially those of the Divvy persuasion) really, really, _really_ love emojis and GIFs.
+
+<!-- livebook:{"break_markdown":true} -->
+
 This talk is supposed to be 5-15 minutes long, so let's make sure we keep it that way with a timer and a super annoying alert!
 
 ```elixir
@@ -9,15 +13,231 @@ alias RanchTalk.TalkTimer
 
 %{
   # 10 minutes
-  seconds_to_count: 3,
+  seconds_to_count: 60 * 10,
   done_message: "Time's up! Shut up and get back to work!"
 }
 |> TalkTimer.new()
 |> TalkTimer.start()
 ```
 
-## Ranch Overview
+## Ranch Introduction
+
+> Special thanks to Cody Poll for the excuse to waste a ton of time playing around with Livebook!
+
+<!-- livebook:{"break_markdown":true} -->
+
+From https://ninenines.eu/docs/en/ranch/2.1/guide/introduction/:
+
+> Ranch is a socket acceptor pool for TCP protocols.
+
+Ok, neat. What in the world does this mean?
+
+### What is a Socket?
+
+I'm not going to go too deep into sockets for the purposes of this talk, so we will operate under this very basic definition of a socket:
+
+1. An interface provided by the operating system (OS, Linux in most cases)
+2. We can open and close sockets to indicate to the OS that we want it to receive packets or not, usually on a given network address and host port
+3. If a socket is opened, it may or may not have packets for us to receive at any given time
+
+If you have a single-threaded process, you usually have an event loop that looks something like this:
+
+1. Open a socket
+2. Check for messages (or packets) in the socket
+3. If there are any messages available from the socket, handle them
+4. Go to 2
+
+This means that while you are processing messages, you cannot receive any more messages, so if it takes a long time to do step 3, your app ain't gonna scale.
+
+Now, Ranch is specifically for TCP sockets, which are slightly more complicated.
+
+#### TCP Sockets
+
+The TCP protocol requires that we "establish" the connection first, due to its bi-directional nature. Contrast this with the UDP protocol, where you can just blast packets unidirectionally to hosts/ports and they'll get received if a socket is listening there or just dropped otherwise. This makes our event loop look _very loosely_ like this now:
+
+1. Open a socket
+2. Check if any pending connections exist on the socket
+3. If there are any pending connections, add them to our list of connections
+   * This is that "acceptor" part that Ranch takes care of for us
+4. For each active connection, check if the connection has any messages
+5. If the connection has any messages, handle them
+6. For each active connection, check if the connection is still active
+7. If it's not, remove the connection
+8. Go to 2
+
+You can quickly see that in a "classical" single-threaded program, this could get pretty overwhelming depending on what "handle them" might entail! You could pretty easily have messages piling up in your socket if your program is synchronously reaching out to a cache, then querying a database, or calling another service. It would be stuck waiting for all of these operations while new messages pour into your socket!
+
+### How does Ranch solve this?
+
+Well, let's imagine _you_ are the poor, single-threaded program taking care of all this stuff. You're running around like mad from the OS socket, to the connection list, shuffling messages all over the place, **and** you're responsible for reading every single one, processing it, and responding.
+
+Obviously, so modern web framework or socket library works this way for obvious reasons. You (or your machine) would be completely overwhelmed!
+
+But this is where Ranch (and Erlang/OTP and Elixir) really shine.
+
+#### How would we ideally _want_ to solve this?
+
+Let's imagine how we would _want_ this to play out. Just like a real-ish mailroom, instead of a single individual running around shuffling all the messages, we would want something like this:
+
+**Spoilers below!**
+
+A bunch of people would constantly be checking the socket for new connections (an "acceptor pool", if you will). Then, when they get one, they take it to a connection manager, who then sets up a pool of listeners to handle messages as they come in. Those listeners take each message and hand it off to a dedicated handler, just for that message. Yep, each message would get _their own_ handler person (process) just for them!
+
+This would be amazing! Now things are more asynchronous. Oh wait, maybe they're _too_ asynchronous. TCP is an _ordered_ protocol, after all, so we might want a single connection listener per connection, instead of a bunch of listeners.
+
+And this is basically what ranch does! Other languages might have a single thread for this task of receiving connections or handling packets, but we're in Elixir-land, yo! We can have a process for everything!
+
+So enough talk, let's see it in action!
+
+## Investigating a Ranch
+
+For starters, we're inside a Livebook, which is a Phoenix LiveView application. Phoenix uses Cowboy as its HTTP(S) server. Cowboy uses Ranch for accepting incoming TCP connections _and_ handling packets from those connections. This means we're _already_ running Ranch and that we've already got at least one listener and connection active -- _you_!
+
+Let's see if we can find ourselves. Erlang/OTP has a ton of awesome tools for looking at the primitives (processes, ports, and sockets), so lets look into some ways to see what we've already got happening, what's going on under the hood, and then let's build our own TCP acceptor pool to dive into.
+
+<!-- livebook:{"break_markdown":true} -->
+
+But before we just start looking for stuff blindly, let's investigate Ranch's documentation to see how it works so we know better what to look for. Don't worry, I'm not really going to make you read documentation yourself during a talk, so I've summarized the important stuff we'll look at below:
+
+* https://ninenines.eu/docs/en/ranch/2.1/guide/introduction/
+  * Just the stuff we've already talked about (minus all the boring socket detail stuff)
+* https://ninenines.eu/docs/en/ranch/2.1/guide/listeners/
+  * We start Ranch by adding the dependency and running [`:application.ensure_all_started(:ranch)`](https://ninenines.eu/docs/en/ranch/2.1/manual/)
+  * We can start a listener with [`:ranch.start_listener/5`](https://ninenines.eu/docs/en/ranch/2.1/manual/ranch.start_listener/)
+* https://ninenines.eu/docs/en/ranch/2.1/guide/internals/
+  * Ranch is an OTP `Application` (named `:ranch`)
+  * It has a "top `Supervisor`" which supervises the `:ranch_server` process _and_ any listeners
+  * Ranch uses a "custom `Supervisor`" for managing connections
+  * Listeners are grouped into the `:ranch_listener_sup` `Supervisor`
+  * Listeners consist of three kinds of processes:
+    * The listener `GenServer`
+    * A `Supervisor` that watches the acceptor processes
+      * The second argument to `:ranch/start_listener/5` indicates the number of processes that will be accepting new connections and we should be careful choosing this number
+        * It defaults to `100`
+    * A `Supervisor` that watches the connection processes
+  * Each listener is registered with the `:ranch_server` `GenServer`
+  * All socket operations go through "transport handlers"
+    * These are simple callback modules (`@behaviour`s) for performing operations on sockets
+  * Accepted connections are given to "the protocol handler" (just TCP for our use case)
+
+<!-- livebook:{"break_markdown":true} -->
+
+Sweet! Armed with this knowledge, we should be able to find evidence of these facts in our system _right now_. Let's do it!
+
+The first and most simple way to look at this stuff is using Livebook's built-in LiveDashboard. You can get to it [here](/dashboard).
+
+**NOTE**: You can select either node from the top-right dropdown. Since Livebook attaches itself as a clustered node to my Mix project I had you clone and both of them are running `:ranch`, either will work!
+
+**Everybody [opens the dashboard](/dashboard), obviously**
+
+Ok, looks nice and all, but what are we looking at now? By default, it drops us into an overview page with nothing relevant to this talk.
+
+Let's go see if we can find the `:ranch` `Application` on [the Applications page](/dashboard/applications).
+
+`Ctrl-F "ranch"` - Easy enough! We can click on it and see the `:ranch_sup`, which is the "top supervisor" mentioned previously, and the `:ranch_server` `GenServer` also mentioned! Cool, they weren't lying to us... at least not completely.
+
+We can click on `:ranch_server` to see more information.
+
+Now, if you selected the Livebook node and NOT the empty shell-of-a-node that is the attached Mix project (you should switch to the correct one now!), you will see that `:ranch_server` monitors a couple of `Supervisor`s:
+
+* `:ranch_conns_sup`
+* `:ranch_listener_sup`
+* `:ranch_conns_sup`
+* `:ranch_listener_sup`
+
+Awesome! We can see the connection `Supervisor` and listener `Supervisor` for port `5588` and likewise for port `5589`. The former for serving the page you're looking at _right now_ and the latter for iFrames or something. Who cares!
+
+We can see exactly what the docs are telling us. Very cool.
+
+But if we click on one of the `conns` `Supervisor`s, I don't see a hundred processes under `Monitors` hanging out waiting for connections. What gives?
+
+Yeah, I dunno. Maybe somebody in the audience knows why they aren't monitored (or at least why they don't show up here).
+
+But if you go to [the Processes page](/dashboard/processes) and `Ctrl-F ":ranch_acceptor.loop"` you will see exactly 200 results.
+
+Ok, this is cool and all, and if we had time, we could look at this in the Observer from pretty much any `iex` session like so:
 
 ```elixir
 :observer.start()
 ```
+
+But we're all getting impatient to build our own Ranch. It won't have horses on it, but it'll have something even better. TCP sockets!
+
+## Building Your Own Ranch in 30 Seconds
+
+My apologies to all the folks that built real ranches over much longer periods of time and with far fewer TCP sockets to show for it.
+
+```elixir
+Application.ensure_all_started(:ranch)
+```
+
+Man, being able to take advantage of Open Source contributors' work is really hard work. That was so easy! Now let's start accepting some TCP connections!
+
+```elixir
+defmodule EchoHandler do
+  def start_link(ref, transport, opts) do
+    pid = spawn_link(__MODULE__, :init, [ref, transport, opts])
+    {:ok, pid}
+  end
+
+  def init(ref, transport, _opts \\ []) do
+    {:ok, socket} = :ranch.handshake(ref)
+    loop(socket, transport)
+  end
+
+  defp loop(socket, transport) do
+    case transport.recv(socket, 0, 5000) do
+      {:ok, data} ->
+        IO.inspect(data)
+        transport.send(socket, data)
+        loop(socket, transport)
+
+      _ ->
+        :ok = transport.close(socket)
+    end
+  end
+end
+
+:ranch.start_listener(:tcp_echo, :ranch_tcp, %{socket_opts: [port: 5555]}, EchoHandler, [])
+
+# Ranch Complete
+```
+
+Ooh, _now_ if we look in our dashboard (at the non-Livebook node) we can see the supervised processes all linked up properly! But I still don't see a hundred monitored processes, so I'm obviously missing _something_. Oh well.
+
+Either way, the ranch is done. Yeah, it really was _that easy_. Let's connect to it and see if it really does echo back to us! You can use `nc` (netcat), `telnet`, or we can use Erlang's `:gen_tcp` like so:
+
+```elixir
+{:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, 5555, [:binary])
+```
+
+See how `:gen_tcp` returns `{:ok, #Port<...>}`? A `Port` is a special Erlang/OTP-ism we can learn about another time. For now, should have got us a connection! Let's send something.
+
+```elixir
+:gen_tcp.send(socket, "Hello, socket! " <> to_string(DateTime.utc_now()))
+```
+
+And if we got `:ok`, this `Process` should have a message in its [mailbox](https://elixir-lang.org/getting-started/processes.html).
+
+```elixir
+messages = :erlang.process_info(self(), :messages)
+IO.inspect(messages)
+```
+
+So it works. You get it now.
+
+```elixir
+:ranch.stop_listener(:tcp_echo)
+```
+
+```elixir
+Application.stop(:ranch)
+```
+
+<div style="text-align: center; font-family: IosevkaLyte">
+Thanks for coming!
+</div>
+
+<div style="text-align: center; font-size: 60px; font-family: IosevkaLyte">
+Fin
+</div>
