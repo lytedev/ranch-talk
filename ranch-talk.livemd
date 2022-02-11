@@ -1,0 +1,23 @@
+# About Ranch
+
+## Talk Timer
+
+This talk is supposed to be 5-15 minutes long, so let's make sure we keep it that way with a timer and a super annoying alert!
+
+```elixir
+alias RanchTalk.TalkTimer
+
+%{
+  # 10 minutes
+  seconds_to_count: 3,
+  done_message: "Time's up! Shut up and get back to work!"
+}
+|> TalkTimer.new()
+|> TalkTimer.start()
+```
+
+## Ranch Overview
+
+```elixir
+:observer.start()
+```
