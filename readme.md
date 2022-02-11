@@ -13,8 +13,10 @@ Install and run a local Livebook in `attached` mode and automatically grab my
 code:
 
 ```bash
+asdf install
 mix escript.install github livebook-dev/livebook
 git clone https://git.lyte.dev/lytedev/ranch-talk.git
+cd ranch-talk
 mix do deps.get, compile
 env LIVEBOOK_PORT=5588 LIVEBOOK_IFRAME_PORT=5589 \
   livebook server --default-runtime mix \
