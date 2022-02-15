@@ -18,7 +18,7 @@ alias RanchTalk.TalkTimer
 %{
   # 10 minutes
   seconds_to_count: 60 * 10,
-  done_message: "Time's up! Shut up and get back to work!"
+  done_message: "Time's up! Shut up and get back to work! 💩"
 }
 |> TalkTimer.new()
 |> TalkTimer.start()
@@ -71,7 +71,7 @@ loop look _very loosely_ like this now:
 1. Open a socket
 2. Check if any pending connections exist on the socket
 3. If there are any pending connections, add them to our list of connections
-   * This is that "acceptor" part that Ranch takes care of for us
+   - This is that "acceptor" part that Ranch takes care of for us
 4. For each active connection, check if the connection has any messages
 5. If the connection has any messages, handle them
 6. For each active connection, check if the connection is still active
@@ -140,33 +140,33 @@ documentation to see how it works so we know better what to look for. Don't
 worry, I'm not really going to make you read documentation yourself during
 a talk, so I've summarized the important stuff we'll look at below:
 
-* https://ninenines.eu/docs/en/ranch/2.1/guide/introduction/
-  * Just the stuff we've already talked about (minus all the boring socket
+- https://ninenines.eu/docs/en/ranch/2.1/guide/introduction/
+  - Just the stuff we've already talked about (minus all the boring socket
     detail stuff)
-* https://ninenines.eu/docs/en/ranch/2.1/guide/listeners/
-  * We start Ranch by adding the dependency and running
+- https://ninenines.eu/docs/en/ranch/2.1/guide/listeners/
+  - We start Ranch by adding the dependency and running
     [`:application.ensure_all_started(:ranch)`](https://ninenines.eu/docs/en/ranch/2.1/manual/)
-  * We can start a listener with
+  - We can start a listener with
     [`:ranch.start_listener/5`](https://ninenines.eu/docs/en/ranch/2.1/manual/ranch.start_listener/)
-* https://ninenines.eu/docs/en/ranch/2.1/guide/internals/
-  * Ranch is an OTP `Application` (named `:ranch`)
-  * It has a "top `Supervisor`" which supervises the `:ranch_server` process
+- https://ninenines.eu/docs/en/ranch/2.1/guide/internals/
+  - Ranch is an OTP `Application` (named `:ranch`)
+  - It has a "top `Supervisor`" which supervises the `:ranch_server` process
     _and_ any listeners
-  * Ranch uses a "custom `Supervisor`" for managing connections
-  * Listeners are grouped into the `:ranch_listener_sup` `Supervisor`
-  * Listeners consist of three kinds of processes:
-    * The listener `GenServer`
-    * A `Supervisor` that watches the acceptor processes
-      * The second argument to `:ranch/start_listener/5` indicates the number
+  - Ranch uses a "custom `Supervisor`" for managing connections
+  - Listeners are grouped into the `:ranch_listener_sup` `Supervisor`
+  - Listeners consist of three kinds of processes:
+    - The listener `GenServer`
+    - A `Supervisor` that watches the acceptor processes
+      - The second argument to `:ranch/start_listener/5` indicates the number
         of processes that will be accepting new connections and we should be
         careful choosing this number
-        * It defaults to `100`
-    * A `Supervisor` that watches the connection processes
-  * Each listener is registered with the `:ranch_server` `GenServer`
-  * All socket operations go through "transport handlers"
-    * These are simple callback modules (`@behaviour`s) for performing
+        - It defaults to `100`
+    - A `Supervisor` that watches the connection processes
+  - Each listener is registered with the `:ranch_server` `GenServer`
+  - All socket operations go through "transport handlers"
+    - These are simple callback modules (`@behaviour`s) for performing
       operations on sockets
-  * Accepted connections are given to "the protocol handler" (just TCP for our
+  - Accepted connections are given to "the protocol handler" (just TCP for our
     use case)
 
 Sweet! Armed with this knowledge, we should be able to find evidence of these
@@ -198,10 +198,10 @@ Now, if you selected the Livebook node and NOT the empty shell-of-a-node that
 is the attached Mix project (you should switch to the correct one now!), you
 will see that `:ranch_server` monitors a couple of `Supervisor`s:
 
-* `:ranch_conns_sup`
-* `:ranch_listener_sup`
-* `:ranch_conns_sup`
-* `:ranch_listener_sup`
+- `:ranch_conns_sup`
+- `:ranch_listener_sup`
+- `:ranch_conns_sup`
+- `:ranch_listener_sup`
 
 Awesome! We can see the connection `Supervisor` and listener `Supervisor` for
 port `5588` and likewise for port `5589`. The former for serving the page
@@ -216,8 +216,7 @@ processes under `Monitors` hanging out waiting for connections. What gives?
 Yeah, I dunno. Maybe somebody in the audience knows why they aren't monitored
 (or at least why they don't show up here).
 
-But if you go to [the Processes page](/dashboard/processes) and `Ctrl-F
-":ranch_acceptor.loop"` you will see exactly 200 results.
+But if you go to [the Processes page](/dashboard/processes) and `Ctrl-F ":ranch_acceptor.loop"` you will see exactly 200 results.
 
 Ok, this is cool and all, and if we had time, we could look at this in the
 Observer from pretty much any `iex` session like so:
@@ -280,12 +279,14 @@ to it and see if it really does echo back to us! You can use `nc` (netcat),
 `telnet`, or we can use Erlang's `:gen_tcp` like so:
 
 ```elixir
-{:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, 5555, [:binary])
+{:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, 5555, [:binary, active: true])
 ```
 
 See how `:gen_tcp` returns `{:ok, #Port<...>}`? A `Port` is a special
 Erlang/OTP-ism we can learn about another time. For now, should have got us
 a connection! Let's send something.
+
+**NOTE**: If you don't hurry and send the message, the TCP socket will be closed due to your inactivity. Better act fast!
 
 ```elixir
 :gen_tcp.send(socket, "Hello, socket! " <> to_string(DateTime.utc_now()))
@@ -295,8 +296,7 @@ And if we got `:ok`, this `Process` should have a message in its
 [mailbox](https://elixir-lang.org/getting-started/processes.html).
 
 ```elixir
-messages = :erlang.process_info(self(), :messages)
-IO.inspect(messages)
+:erlang.process_info(self(), :messages)
 ```
 
 So it works. You get it now.
