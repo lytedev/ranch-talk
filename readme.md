@@ -1,5 +1,7 @@
 # ranch-talk
 
+[🖥️ Upstream][upstream] • [🐙 GitHub Mirror][github]
+
 I was asked to give a 5-15 minute talk on [Ranch][ranch], a TCP socket acceptor
 pool, to show how OTP constructs are used in the real world and expose some of
 [Phoenix's][phoenix] underpinnings. This [Livebook][livebook] contains my code
@@ -29,3 +31,5 @@ Enjoy!
 [phoenix]: https://www.phoenixframework.org/
 [livebook]: https://github.com/livebook-dev/livebook
 [divvy]: https://getdivvy.com/
+[upstream]: https://git.lyte.dev/lytedev/ranch-talk
+[github]: https://github.com/lytedev/ranch-talk
