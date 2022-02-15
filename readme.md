@@ -3,9 +3,9 @@
 [🖥️ Upstream][upstream] • [🐙 GitHub Mirror][github]
 
 I was asked to give a 5-15 minute talk on [Ranch][ranch], a TCP socket acceptor
-pool, to show how OTP constructs are used in the real world and expose some of
-[Phoenix's][phoenix] underpinnings. This [Livebook][livebook] contains my code
-and notes for that talk.
+pool writter in Erlang, to show how OTP constructs are used in the real world
+and expose some of [Elixir's Phoenix's][phoenix] underpinnings. This
+[Livebook][livebook] contains my code and notes for that talk.
 
 Thanks to [Divvy][divvy] for inviting me to give this talk.
 
